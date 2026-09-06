@@ -1,12 +1,6 @@
 import json
 
-from rag import (
-    load_vectorstore,
-    load_bm25,
-    get_reranker,
-    hybrid_retrieve,
-    rerank,
-)
+from rag import load_vectorstore, load_bm25, get_reranker, retrieve_dense, retrieve_bm25, reciprocal_rank_fusion, rerank
 
 
 DATASET_PATH = "threshold_dataset.json"
@@ -15,20 +9,13 @@ DENSE_K = 10
 BM25_K = 10
 HYBRID_K = 10
 
-THRESHOLDS = [
-    -6.0,
-    -5.0,
-    -4.0,
-    -3.0,
-    -2.0,
-    -1.0,
-    0.0,
-]
+THRESHOLDS = [-6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0]
 
 
 def load_dataset():
-    with open(DATASET_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+
+    with open(DATASET_PATH, "r", encoding="utf-8") as file:
+        return json.load(file)
 
 
 def main():
@@ -36,7 +23,6 @@ def main():
     dataset = load_dataset()
 
     print(f"Questions: {len(dataset)}")
-
     print("\nLoading retrieval components...")
 
     vectorstore = load_vectorstore()
@@ -45,10 +31,6 @@ def main():
 
     print("Components loaded.\n")
 
-    # -----------------------------------------------------
-    # Calculate reranker scores ONCE
-    # -----------------------------------------------------
-
     scored_queries = []
 
     for index, item in enumerate(dataset, start=1):
@@ -56,23 +38,31 @@ def main():
         question = item["question"]
         label = item["label"]
 
-        hybrid_results = hybrid_retrieve(
-            vectorstore=vectorstore,
-            bm25=bm25,
-            bm25_documents=bm25_documents,
-            query=question,
-            dense_k=DENSE_K,
-            bm25_k=BM25_K,
-            final_k=HYBRID_K,
+        dense_results = retrieve_dense(
+            vectorstore,
+            question,
+            k=DENSE_K
         )
 
-        # No threshold here.
+        bm25_results = retrieve_bm25(
+            bm25,
+            bm25_documents,
+            question,
+            k=BM25_K
+        )
+
+        hybrid_results = reciprocal_rank_fusion(
+            dense_results,
+            bm25_results,
+            final_k=HYBRID_K
+        )
+
         scored_results = rerank(
             query=question,
             results=hybrid_results,
             reranker=reranker,
             final_k=HYBRID_K,
-            min_score=-1e9,
+            min_score=-1e9
         )
 
         scores = [
@@ -85,7 +75,7 @@ def main():
         scored_queries.append({
             "question": question,
             "label": label,
-            "max_score": max_score,
+            "max_score": max_score
         })
 
         print(
@@ -94,10 +84,6 @@ def main():
             f"max score = {max_score:8.4f} | "
             f"{question}"
         )
-
-    # -----------------------------------------------------
-    # Evaluate different thresholds
-    # -----------------------------------------------------
 
     print("\n")
     print("=" * 90)
@@ -125,13 +111,8 @@ def main():
 
         for item in scored_queries:
 
-            predicted_in_domain = (
-                item["max_score"] >= threshold
-            )
-
-            actual_in_domain = (
-                item["label"] == "in_domain"
-            )
+            predicted_in_domain = item["max_score"] >= threshold
+            actual_in_domain = item["label"] == "in_domain"
 
             if actual_in_domain:
 
@@ -150,19 +131,9 @@ def main():
             if predicted_in_domain == actual_in_domain:
                 correct += 1
 
-        in_accept_rate = (
-            in_accepted / in_total
-            if in_total else 0
-        )
-
-        out_reject_rate = (
-            out_rejected / out_total
-            if out_total else 0
-        )
-
-        accuracy = (
-            correct / len(scored_queries)
-        )
+        in_accept_rate = in_accepted / in_total if in_total else 0
+        out_reject_rate = out_rejected / out_total if out_total else 0
+        accuracy = correct / len(scored_queries)
 
         print(
             f"{threshold:>12.1f}"
@@ -171,47 +142,36 @@ def main():
             f"{accuracy:>14.3f}"
         )
 
-    # -----------------------------------------------------
-    # Score distribution
-    # -----------------------------------------------------
-
     print("\n")
     print("=" * 90)
     print("INDIVIDUAL MAX SCORES")
     print("=" * 90)
 
     in_domain = [
-        item for item in scored_queries
+        item
+        for item in scored_queries
         if item["label"] == "in_domain"
     ]
 
     out_domain = [
-        item for item in scored_queries
+        item
+        for item in scored_queries
         if item["label"] == "out_of_domain"
     ]
 
     print("\nIN-DOMAIN:")
 
-    for item in sorted(
-        in_domain,
-        key=lambda x: x["max_score"]
-    ):
-        print(
-            f"{item['max_score']:>8.4f} | "
-            f"{item['question']}"
-        )
+    for item in sorted(in_domain, key=lambda x: x["max_score"]):
+        print(f"{item['max_score']:>8.4f} | {item['question']}")
 
     print("\nOUT-OF-DOMAIN:")
 
     for item in sorted(
         out_domain,
         key=lambda x: x["max_score"],
-        reverse=True,
+        reverse=True
     ):
-        print(
-            f"{item['max_score']:>8.4f} | "
-            f"{item['question']}"
-        )
+        print(f"{item['max_score']:>8.4f} | {item['question']}")
 
 
 if __name__ == "__main__":

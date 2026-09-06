@@ -18,30 +18,18 @@ EVAL_DATASET_PATH = "evaluation_dataset.json"
 DENSE_K = 10
 BM25_K = 10
 HYBRID_K = 10
-
-# We evaluate ranking at 1, 3 and 5,
-# so the reranker must return at least 5 results.
 RERANK_K = 10
 
 
-# =========================================================
 # LOAD DATASET
-# =========================================================
 
 def load_eval_dataset():
 
-    with open(
-        EVAL_DATASET_PATH,
-        "r",
-        encoding="utf-8"
-    ) as file:
-
+    with open(EVAL_DATASET_PATH, "r", encoding="utf-8") as file:
         return json.load(file)
 
 
-# =========================================================
 # HELPERS
-# =========================================================
 
 def get_chunk_ids(results):
 
@@ -51,67 +39,35 @@ def get_chunk_ids(results):
     ]
 
 
-# =========================================================
 # METRICS
-# =========================================================
 
-def hit_at_k(
-    retrieved_ids,
-    relevant_ids,
-    k
-):
+def hit_at_k(retrieved_ids, relevant_ids, k):
 
     retrieved_ids = retrieved_ids[:k]
 
     return int(
-        any(
-            chunk_id in relevant_ids
-            for chunk_id in retrieved_ids
-        )
+        any(chunk_id in relevant_ids for chunk_id in retrieved_ids)
     )
 
 
-def recall_at_k(
-    retrieved_ids,
-    relevant_ids,
-    k
-):
+def recall_at_k(retrieved_ids, relevant_ids, k):
 
     if not relevant_ids:
         return 0.0
 
-    retrieved_set = set(
-        retrieved_ids[:k]
-    )
+    retrieved_set = set(retrieved_ids[:k])
+    relevant_set = set(relevant_ids)
 
-    relevant_set = set(
-        relevant_ids
-    )
+    retrieved_relevant = retrieved_set & relevant_set
 
-    retrieved_relevant = (
-        retrieved_set
-        & relevant_set
-    )
-
-    return (
-        len(retrieved_relevant)
-        / len(relevant_set)
-    )
+    return len(retrieved_relevant) / len(relevant_set)
 
 
-def reciprocal_rank(
-    retrieved_ids,
-    relevant_ids
-):
+def reciprocal_rank(retrieved_ids, relevant_ids):
 
-    relevant_set = set(
-        relevant_ids
-    )
+    relevant_set = set(relevant_ids)
 
-    for rank, chunk_id in enumerate(
-        retrieved_ids,
-        start=1
-    ):
+    for rank, chunk_id in enumerate(retrieved_ids, start=1):
 
         if chunk_id in relevant_set:
             return 1.0 / rank
@@ -119,15 +75,9 @@ def reciprocal_rank(
     return 0.0
 
 
-# =========================================================
-# EVALUATE ONE RETRIEVAL METHOD
-# =========================================================
+# EVALUATE ONE METHOD
 
-def evaluate_method(
-    name,
-    retrieval_function,
-    dataset
-):
+def evaluate_method(name, retrieval_function, dataset):
 
     hit1_scores = []
     hit3_scores = []
@@ -144,65 +94,23 @@ def evaluate_method(
     print(name)
     print("=" * 100)
 
-    for index, item in enumerate(
-        dataset,
-        start=1
-    ):
+    for index, item in enumerate(dataset, start=1):
 
         question = item["question"]
+        relevant_ids = item["relevant_chunk_ids"]
 
-        relevant_ids = item[
-            "relevant_chunk_ids"
-        ]
+        results = retrieval_function(question)
+        retrieved_ids = get_chunk_ids(results)
 
-        results = retrieval_function(
-            question
-        )
+        hit1 = hit_at_k(retrieved_ids, relevant_ids, 1)
+        hit3 = hit_at_k(retrieved_ids, relevant_ids, 3)
+        hit5 = hit_at_k(retrieved_ids, relevant_ids, 5)
 
-        retrieved_ids = get_chunk_ids(
-            results
-        )
+        recall1 = recall_at_k(retrieved_ids, relevant_ids, 1)
+        recall3 = recall_at_k(retrieved_ids, relevant_ids, 3)
+        recall5 = recall_at_k(retrieved_ids, relevant_ids, 5)
 
-        hit1 = hit_at_k(
-            retrieved_ids,
-            relevant_ids,
-            1
-        )
-
-        hit3 = hit_at_k(
-            retrieved_ids,
-            relevant_ids,
-            3
-        )
-
-        hit5 = hit_at_k(
-            retrieved_ids,
-            relevant_ids,
-            5
-        )
-
-        recall1 = recall_at_k(
-            retrieved_ids,
-            relevant_ids,
-            1
-        )
-
-        recall3 = recall_at_k(
-            retrieved_ids,
-            relevant_ids,
-            3
-        )
-
-        recall5 = recall_at_k(
-            retrieved_ids,
-            relevant_ids,
-            5
-        )
-
-        rr = reciprocal_rank(
-            retrieved_ids,
-            relevant_ids
-        )
+        rr = reciprocal_rank(retrieved_ids, relevant_ids)
 
         hit1_scores.append(hit1)
         hit3_scores.append(hit3)
@@ -214,18 +122,9 @@ def evaluate_method(
 
         rr_scores.append(rr)
 
-        print(
-            f"\n[{index}/{len(dataset)}] "
-            f"{question}"
-        )
-
-        print(
-            f"Relevant:  {relevant_ids}"
-        )
-
-        print(
-            f"Retrieved: {retrieved_ids[:5]}"
-        )
+        print(f"\n[{index}/{len(dataset)}] {question}")
+        print(f"Relevant:  {relevant_ids}")
+        print(f"Retrieved: {retrieved_ids[:5]}")
 
         print(
             f"Hit@1={hit1} | "
@@ -239,67 +138,36 @@ def evaluate_method(
         "Hit@1": mean(hit1_scores),
         "Hit@3": mean(hit3_scores),
         "Hit@5": mean(hit5_scores),
-
-        "Recall@1": mean(
-            recall1_scores
-        ),
-
-        "Recall@3": mean(
-            recall3_scores
-        ),
-
-        "Recall@5": mean(
-            recall5_scores
-        ),
-
+        "Recall@1": mean(recall1_scores),
+        "Recall@3": mean(recall3_scores),
+        "Recall@5": mean(recall5_scores),
         "MRR": mean(rr_scores),
     }
 
 
-# =========================================================
 # MAIN
-# =========================================================
 
 def main():
 
-    print(
-        "Loading evaluation dataset..."
-    )
+    print("Loading evaluation dataset...")
 
     dataset = load_eval_dataset()
 
-    print(
-        f"Questions: {len(dataset)}"
-    )
+    print(f"Questions: {len(dataset)}")
 
-    print(
-        "\nLoading FAISS..."
-    )
-
+    print("\nLoading FAISS...")
     vectorstore = load_vectorstore()
 
-    print(
-        "Loading BM25..."
-    )
+    print("Loading BM25...")
+    bm25, bm25_documents = load_bm25()
 
-    bm25, bm25_documents = (
-        load_bm25()
-    )
-
-    print(
-        "Loading CrossEncoder..."
-    )
-
+    print("Loading CrossEncoder...")
     reranker = get_reranker()
 
-    print(
-        "All components loaded."
-    )
+    print("All components loaded.")
 
 
-    # =====================================================
     # A. FAISS ONLY
-    # =====================================================
 
     def faiss_only(query):
 
@@ -310,9 +178,7 @@ def main():
         )
 
 
-    # =====================================================
     # B. BM25 ONLY
-    # =====================================================
 
     def bm25_only(query):
 
@@ -324,9 +190,7 @@ def main():
         )
 
 
-    # =====================================================
     # C. FAISS + BM25 + RRF
-    # =====================================================
 
     def hybrid_rrf(query):
 
@@ -341,29 +205,13 @@ def main():
         )
 
 
-    # =====================================================
     # D. HYBRID + CROSS ENCODER
-    # =====================================================
 
     def hybrid_reranked(query):
 
-        hybrid_results = (
-            hybrid_rrf(query)
-        )
+        hybrid_results = hybrid_rrf(query)
 
-        # Some versions of our rerank()
-        # include min_score and some do not.
-        #
-        # During ranking evaluation we DISABLE
-        # the relevance threshold because we want
-        # to measure reranking itself separately
-        # from rejection/gating.
-
-        rerank_parameters = (
-            inspect.signature(
-                rerank
-            ).parameters
-        )
+        rerank_parameters = inspect.signature(rerank).parameters
 
         if "min_score" in rerank_parameters:
 
@@ -383,31 +231,18 @@ def main():
         )
 
 
-    # =====================================================
     # RUN ALL METHODS
-    # =====================================================
 
     methods = {
-
-        "FAISS only":
-            faiss_only,
-
-        "BM25 only":
-            bm25_only,
-
-        "FAISS + BM25 + RRF":
-            hybrid_rrf,
-
-        "Hybrid + CrossEncoder":
-            hybrid_reranked,
+        "FAISS only": faiss_only,
+        "BM25 only": bm25_only,
+        "FAISS + BM25 + RRF": hybrid_rrf,
+        "Hybrid + CrossEncoder": hybrid_reranked,
     }
-
 
     all_metrics = {}
 
-    for name, retrieval_function in (
-        methods.items()
-    ):
+    for name, retrieval_function in methods.items():
 
         metrics = evaluate_method(
             name,
@@ -418,18 +253,11 @@ def main():
         all_metrics[name] = metrics
 
 
-    # =====================================================
     # FINAL TABLE
-    # =====================================================
 
     print("\n\n")
-
     print("=" * 112)
-
-    print(
-        "FINAL RETRIEVAL EVALUATION"
-    )
-
+    print("FINAL RETRIEVAL EVALUATION")
     print("=" * 112)
 
     print(
@@ -445,9 +273,7 @@ def main():
 
     print("-" * 112)
 
-    for name, metrics in (
-        all_metrics.items()
-    ):
+    for name, metrics in all_metrics.items():
 
         print(
             f"{name:30}"
