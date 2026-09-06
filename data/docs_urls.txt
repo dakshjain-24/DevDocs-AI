@@ -1,0 +1,7 @@
+https://docs.langchain.com/oss/python/langchain/knowledge-base
+https://docs.langchain.com/oss/python/integrations/document_loaders
+https://docs.langchain.com/oss/python/integrations/splitters
+https://docs.langchain.com/oss/python/integrations/splitters/recursive_text_splitter
+https://docs.langchain.com/oss/python/integrations/vectorstores
+https://docs.langchain.com/oss/python/integrations/providers/huggingface
+https://docs.langchain.com/oss/python/integrations/embeddings/huggingfacehub

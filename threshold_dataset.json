@@ -1,0 +1,51 @@
+[
+  {
+    "question": "What is a vector store?",
+    "label": "in_domain"
+  },
+  {
+    "question": "What is RecursiveCharacterTextSplitter?",
+    "label": "in_domain"
+  },
+  {
+    "question": "What is a document loader in LangChain?",
+    "label": "in_domain"
+  },
+  {
+    "question": "What is HuggingFaceEmbeddings used for?",
+    "label": "in_domain"
+  },
+  {
+    "question": "What search types does VectorStoreRetriever support?",
+    "label": "in_domain"
+  },
+  {
+    "question": "How can Hugging Face embedding models be run locally?",
+    "label": "in_domain"
+  },
+
+  {
+    "question": "How does Kubernetes schedule pods?",
+    "label": "out_of_domain"
+  },
+  {
+    "question": "What is the capital of France?",
+    "label": "out_of_domain"
+  },
+  {
+    "question": "How does TCP congestion control work?",
+    "label": "out_of_domain"
+  },
+  {
+    "question": "What is polymorphism in C++?",
+    "label": "out_of_domain"
+  },
+  {
+    "question": "How do transformers use self-attention?",
+    "label": "out_of_domain"
+  },
+  {
+    "question": "How does a SQL database perform joins?",
+    "label": "out_of_domain"
+  }
+]

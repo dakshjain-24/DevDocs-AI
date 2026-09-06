@@ -1,0 +1,162 @@
+[
+  {
+    "question": "What is a LangChain Document?",
+    "relevant_chunk_ids": [2]
+  },
+  {
+    "question": "What information can a LangChain Document contain?",
+    "relevant_chunk_ids": [2]
+  },
+  {
+    "question": "How are embeddings used for vector search?",
+    "relevant_chunk_ids": [3]
+  },
+  {
+    "question": "How can HuggingFaceEmbeddings be initialized with a Sentence Transformers model?",
+    "relevant_chunk_ids": [5, 6]
+  },
+  {
+    "question": "What is a vector store?",
+    "relevant_chunk_ids": [52]
+  },
+  {
+    "question": "What operations does the LangChain vector store interface support?",
+    "relevant_chunk_ids": [52]
+  },
+  {
+    "question": "How do you add documents to a vector store?",
+    "relevant_chunk_ids": [52, 53]
+  },
+  {
+    "question": "How do you delete documents from a vector store?",
+    "relevant_chunk_ids": [52, 53]
+  },
+  {
+    "question": "What types of queries can be performed on a VectorStore?",
+    "relevant_chunk_ids": [17, 18]
+  },
+  {
+    "question": "How does similarity_search retrieve relevant passages?",
+    "relevant_chunk_ids": [18]
+  },
+  {
+    "question": "What does a similarity score returned by a vector store mean?",
+    "relevant_chunk_ids": [21]
+  },
+  {
+    "question": "How can you search a vector store using an embedding vector instead of a string?",
+    "relevant_chunk_ids": [23]
+  },
+  {
+    "question": "What is a retriever in LangChain?",
+    "relevant_chunk_ids": [25]
+  },
+  {
+    "question": "Can retrievers be created from vector stores?",
+    "relevant_chunk_ids": [25, 29]
+  },
+  {
+    "question": "How do you convert a vector store into a VectorStoreRetriever?",
+    "relevant_chunk_ids": [29]
+  },
+  {
+    "question": "What search types does VectorStoreRetriever support?",
+    "relevant_chunk_ids": [33]
+  },
+  {
+    "question": "What is the purpose of similarity_score_threshold in VectorStoreRetriever?",
+    "relevant_chunk_ids": [33]
+  },
+  {
+    "question": "What is a document loader in LangChain?",
+    "relevant_chunk_ids": [34]
+  },
+  {
+    "question": "What is the difference between load() and lazy_load() for document loaders?",
+    "relevant_chunk_ids": [34, 35]
+  },
+  {
+    "question": "How can document loaders be used to load webpages?",
+    "relevant_chunk_ids": [35, 36]
+  },
+  {
+    "question": "Which types of document loaders can be used for PDF files?",
+    "relevant_chunk_ids": [37, 38]
+  },
+  {
+    "question": "Which LangChain loaders support Google Cloud Storage and Google Drive?",
+    "relevant_chunk_ids": [39]
+  },
+  {
+    "question": "Why are text splitters used before retrieval?",
+    "relevant_chunk_ids": [42]
+  },
+  {
+    "question": "What is RecursiveCharacterTextSplitter?",
+    "relevant_chunk_ids": [43]
+  },
+  {
+    "question": "How does RecursiveCharacterTextSplitter decide where to split text?",
+    "relevant_chunk_ids": [43, 47]
+  },
+  {
+    "question": "What are the default separators used by RecursiveCharacterTextSplitter?",
+    "relevant_chunk_ids": [47]
+  },
+  {
+    "question": "What does chunk_size control in RecursiveCharacterTextSplitter?",
+    "relevant_chunk_ids": [49]
+  },
+  {
+    "question": "What does chunk_overlap control in RecursiveCharacterTextSplitter?",
+    "relevant_chunk_ids": [49]
+  },
+  {
+    "question": "What does length_function do in RecursiveCharacterTextSplitter?",
+    "relevant_chunk_ids": [49]
+  },
+  {
+    "question": "Why may the default RecursiveCharacterTextSplitter separators be unsuitable for Chinese, Japanese, or Thai?",
+    "relevant_chunk_ids": [50]
+  },
+  {
+    "question": "How can separators be customized for languages without word boundaries?",
+    "relevant_chunk_ids": [50, 51]
+  },
+  {
+    "question": "What are examples of structure-based text splitting?",
+    "relevant_chunk_ids": [46]
+  },
+  {
+    "question": "What is HuggingFaceEmbeddings used for?",
+    "relevant_chunk_ids": [78, 80]
+  },
+  {
+    "question": "How can Hugging Face embedding models be run locally?",
+    "relevant_chunk_ids": [80, 81]
+  },
+  {
+    "question": "What is HuggingFaceEndpointEmbeddings used for?",
+    "relevant_chunk_ids": [78, 82]
+  },
+  {
+    "question": "What are the three ways LangChain supports Hugging Face embedding models?",
+    "relevant_chunk_ids": [80]
+  },
+  {
+    "question": "How do you generate query and document embeddings with HuggingFaceEmbeddings?",
+    "relevant_chunk_ids": [81]
+  },
+  {
+    "question": "How can a specific Hugging Face Inference Provider be selected?",
+    "relevant_chunk_ids": [82]
+  },
+  {
+    "question": "What is Text Embeddings Inference (TEI)?",
+    "relevant_chunk_ids": [78, 80, 83]
+  },
+  {
+    "question": "Why is normalize_embeddings enabled when using BGE embedding models?",
+    "relevant_chunk_ids": [79]
+  }
+]

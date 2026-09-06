@@ -1,0 +1,32 @@
+# Virtual environment
+venv/
+.venv/
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# IDE / editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated indexes / storage
+storage/faiss_index/
+storage/bm25.pkl
+storage/manifest.json
+
+# Logs / temporary files
+*.log
+*.tmp
+
+#
+chunks.txt
