@@ -38,12 +38,8 @@ RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 # TOKENIZER
 
-def tokenize(text: str):
-
-    return re.findall(
-        r"[A-Za-z0-9_\.]+",
-        text.lower()
-    )
+def tokenize(text):
+    return re.findall(r"[A-Za-z0-9_\.]+", text.lower())
 
 
 # LOAD EMBEDDINGS
@@ -58,9 +54,7 @@ def get_embeddings():
 def load_vectorstore():
 
     if not FAISS_DIR.exists():
-        raise FileNotFoundError(
-            "FAISS index not found. Run `python ingest.py` first."
-        )
+        raise FileNotFoundError("FAISS index not found. Run `python ingest.py` first.")
 
     embeddings = get_embeddings()
 
@@ -76,9 +70,7 @@ def load_vectorstore():
 def load_bm25():
 
     if not BM25_PATH.exists():
-        raise FileNotFoundError(
-            "BM25 index not found. Run `python ingest.py` first."
-        )
+        raise FileNotFoundError("BM25 index not found. Run `python ingest.py` first.")
 
     with open(BM25_PATH, "rb") as file:
         data = pickle.load(file)
@@ -225,10 +217,7 @@ def rerank(query, results, reranker, final_k=4, min_score=0.0):
         return []
 
     pairs = [
-        (
-            query,
-            item["document"].page_content
-        )
+        (query, item["document"].page_content)
         for item in results
     ]
 
@@ -243,6 +232,7 @@ def rerank(query, results, reranker, final_k=4, min_score=0.0):
         new_item["reranker_score"] = float(score)
 
         reranked_results.append(new_item)
+
 
     reranked_results.sort(
         key=lambda item: item["reranker_score"],
@@ -262,13 +252,9 @@ def rerank(query, results, reranker, final_k=4, min_score=0.0):
 
 def build_retrieval_chain(vectorstore, bm25, bm25_documents, reranker, dense_k=10, bm25_k=10, hybrid_k=10, final_k=4):
 
-    dense = RunnableLambda(
-        lambda query: retrieve_dense(vectorstore, query, k=dense_k)
-    )
+    dense = RunnableLambda(lambda query: retrieve_dense(vectorstore, query, k=dense_k))
 
-    sparse = RunnableLambda(
-        lambda query: retrieve_bm25(bm25, bm25_documents, query, k=bm25_k)
-    )
+    sparse = RunnableLambda(lambda query: retrieve_bm25(bm25, bm25_documents, query, k=bm25_k))
 
     parallel = RunnableParallel(
         dense=dense,
@@ -283,11 +269,8 @@ def build_retrieval_chain(vectorstore, bm25, bm25_documents, reranker, dense_k=1
         }
     )
 
-    reranker_chain = RunnableLambda(
-        lambda x: rerank(
-            x["query"], x["results"], reranker, final_k=final_k
-        )
-    )
+    reranker_chain = RunnableLambda(lambda x: rerank( x["query"], x["results"], reranker, final_k=final_k))
+        
 
     return parallel | rrf | reranker_chain
 

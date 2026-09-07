@@ -3,16 +3,14 @@ import pickle
 import re
 from pathlib import Path
 
-import requests
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-
 from rank_bm25 import BM25Okapi
+
+from langchain_community.document_loaders import WebBaseLoader, TextLoader
+from langchain_community.vectorstores import FAISS
+from langchain_core.runnables import RunnableLambda, RunnableParallel
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 load_dotenv()
@@ -22,14 +20,11 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
 
-DATA_DIR = BASE_DIR / "data"
-LOCAL_DOCS_DIR = DATA_DIR / "local_docs"
-
-URL_FILE = DATA_DIR / "docs_urls.txt"
+URLS_PATH = BASE_DIR / "data" / "docs_urls.txt"
+LOCAL_DOCS_DIR = BASE_DIR / "data" / "local_docs"
 
 STORAGE_DIR = BASE_DIR / "storage"
 FAISS_DIR = STORAGE_DIR / "faiss_index"
-
 BM25_PATH = STORAGE_DIR / "bm25.pkl"
 MANIFEST_PATH = STORAGE_DIR / "manifest.json"
 
@@ -42,142 +37,56 @@ CHUNK_SIZE = 900
 CHUNK_OVERLAP = 150
 
 
-# CLEAN TEXT
+# TOKENIZATION
 
-def clean_text(text: str) -> str:
-
-    text = re.sub(r"\r\n?", "\n", text)
-    text = re.sub(r"\n\s*\n+", "\n\n", text)
-    text = re.sub(r"[ \t]+", " ", text)
-
-    return text.strip()
+def tokenize(text):
+    return re.findall(r"[A-Za-z0-9_\.]+", text.lower())
 
 
-# BM25 TOKENIZATION
+# LOAD URLS
 
-def tokenize(text: str):
+def load_urls():
 
-    return re.findall(
-        r"[A-Za-z0-9_\.]+",
-        text.lower()
-    )
+    if not URLS_PATH.exists():
+        return []
 
+    with open(URLS_PATH, "r", encoding="utf-8") as file:
 
-# FETCH WEB DOCUMENT
-
-def fetch_web_document(url: str) -> Document:
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; DevDocsRAG/1.0)"
-    }
-
-    response = requests.get(
-        url,
-        headers=headers,
-        timeout=20,
-        allow_redirects=True
-    )
-
-    response.raise_for_status()
-
-    final_url = response.url
-
-    if final_url.rstrip("/") != url.rstrip("/"):
-        print("\nRedirect detected:")
-        print(f"Original: {url}")
-        print(f"Final: {final_url}")
-
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    for tag in soup([
-        "script",
-        "style",
-        "nav",
-        "footer",
-        "header",
-        "noscript",
-        "aside"
-    ]):
-        tag.decompose()
-
-    content = soup.find("main") or soup.find("article") or soup.body
-
-    if content is None:
-        raise ValueError(
-            f"Could not extract useful content from {final_url}"
-        )
-
-    text = content.get_text(separator="\n", strip=True)
-    text = clean_text(text)
-
-    if not text:
-        raise ValueError(
-            f"Extracted page was empty: {final_url}"
-        )
-
-    title = final_url
-
-    if soup.title:
-        title_text = soup.title.get_text(strip=True)
-
-        if title_text:
-            title = title_text
-
-    return Document(
-        page_content=text,
-        metadata={
-            "title": title,
-            "source": final_url,
-            "original_source": url,
-            "source_type": "web"
-        }
-    )
+        return [
+            line.strip()
+            for line in file
+            if line.strip() and not line.startswith("#")
+        ]
 
 
-# LOAD URL LIST
+# LOAD WEB DOCUMENTS
 
-def load_web_documents():
+def load_web_documents(urls):
 
     documents = []
-    failures = []
 
-    if not URL_FILE.exists():
-        print(f"Warning: URL file not found: {URL_FILE}")
-        return documents, failures
-
-    urls = []
-
-    with open(URL_FILE, "r", encoding="utf-8") as file:
-
-        for line in file:
-            line = line.strip()
-
-            if line and not line.startswith("#"):
-                urls.append(line)
-
-    print(f"Found {len(urls)} documentation URLs.")
-
-    for index, url in enumerate(urls, start=1):
-
-        print(f"\n[{index}/{len(urls)}] Fetching: {url}")
+    for url in urls:
 
         try:
-            document = fetch_web_document(url)
-            documents.append(document)
+            print(f"Loading: {url}")
 
-            print(f"Loaded: {document.metadata.get('title')}")
+            loader = WebBaseLoader(url)
+            docs = loader.load()
+
+            for document in docs:
+
+                document.metadata["source_type"] = "web"
+
+                if not document.metadata.get("title"):
+                    document.metadata["title"] = url
+
+                documents.append(document)
 
         except Exception as error:
+            print(f"Failed to load {url}")
+            print(error)
 
-            print(f"FAILED: {url}")
-            print(f"Reason: {error}")
-
-            failures.append({
-                "source": url,
-                "error": str(error)
-            })
-
-    return documents, failures
+    return documents
 
 
 # LOAD LOCAL DOCUMENTS
@@ -186,82 +95,181 @@ def load_local_documents():
 
     documents = []
 
-    LOCAL_DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    if not LOCAL_DOCS_DIR.exists():
+        return documents
 
-    supported_extensions = {".txt", ".md"}
+    files = list(LOCAL_DOCS_DIR.rglob("*.txt"))
+    files += list(LOCAL_DOCS_DIR.rglob("*.md"))
 
-    for path in LOCAL_DOCS_DIR.rglob("*"):
+    for path in files:
 
-        if path.is_file() and path.suffix.lower() in supported_extensions:
+        try:
+            print(f"Loading: {path.name}")
 
-            try:
-                text = path.read_text(encoding="utf-8")
-                text = clean_text(text)
+            loader = TextLoader(str(path), encoding="utf-8")
+            docs = loader.load()
 
-                if not text:
-                    continue
+            for document in docs:
 
-                documents.append(
-                    Document(
-                        page_content=text,
-                        metadata={
-                            "title": path.stem,
-                            "source": str(path.resolve()),
-                            "original_source": str(path.resolve()),
-                            "source_type": "local"
-                        }
-                    )
-                )
+                document.metadata["source"] = str(path)
+                document.metadata["source_type"] = "local"
+                document.metadata["title"] = path.name
 
-                print(f"Loaded local file: {path.name}")
+                documents.append(document)
 
-            except Exception as error:
-                print(f"Failed local document {path}: {error}")
+        except Exception as error:
+            print(f"Failed to load {path}")
+            print(error)
 
     return documents
 
 
-# DEDUPLICATE DOCUMENTS
+# CLEAN DOCUMENTS
 
-def deduplicate_documents(documents):
+def clean_documents(documents):
 
-    unique_documents = []
-    seen_sources = set()
-    duplicates = []
+    cleaned = []
 
     for document in documents:
 
-        source = document.metadata.get("source", "").rstrip("/")
+        text = document.page_content
+        text = re.sub(r"\s+", " ", text)
+        text = text.strip()
 
-        if source in seen_sources:
-
-            duplicates.append(
-                document.metadata.get("original_source", source)
-            )
-
+        if not text:
             continue
 
-        seen_sources.add(source)
+        document.page_content = text
+        cleaned.append(document)
+
+    return cleaned
+
+
+# DEDUPLICATE
+
+def deduplicate_documents(documents):
+
+    seen = set()
+    unique_documents = []
+
+    for document in documents:
+
+        source = document.metadata.get("source", "")
+
+        if source in seen:
+            continue
+
+        seen.add(source)
         unique_documents.append(document)
-
-    if duplicates:
-
-        print(f"\nRemoved {len(duplicates)} duplicate redirected document(s).")
-
-        for duplicate in duplicates:
-            print(f"Duplicate: {duplicate}")
 
     return unique_documents
 
 
-# ADD CHUNK METADATA
+# SPLIT DOCUMENTS
 
-def add_chunk_metadata(chunks):
+def split_documents(documents):
 
-    for index, chunk in enumerate(chunks):
-        chunk.metadata["chunk_id"] = index
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP
+    )
+
+    chunks = splitter.split_documents(documents)
+
+    for chunk_id, chunk in enumerate(chunks):
+        chunk.metadata["chunk_id"] = chunk_id
 
     return chunks
+
+
+# BUILD FAISS
+
+def build_faiss(chunks):
+
+    print("\nLoading embedding model...")
+
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+
+    print("Building FAISS index...")
+
+    vectorstore = FAISS.from_documents(chunks, embeddings)
+    vectorstore.save_local(str(FAISS_DIR))
+
+    return vectorstore
+
+
+# BUILD BM25
+
+def build_bm25(chunks):
+
+    print("Building BM25 index...")
+
+    tokenized_documents = [
+        tokenize(document.page_content)
+        for document in chunks
+    ]
+
+    bm25 = BM25Okapi(tokenized_documents)
+
+    with open(BM25_PATH, "wb") as file:
+
+        pickle.dump({
+            "bm25": bm25,
+            "documents": chunks
+        }, file)
+
+    return bm25
+
+
+# SAVE MANIFEST
+
+def save_manifest(documents, chunks):
+
+    sources = []
+
+    for document in documents:
+
+        sources.append({
+            "title": document.metadata.get("title", "Untitled"),
+            "source": document.metadata.get("source", ""),
+            "source_type": document.metadata.get("source_type", "unknown")
+        })
+
+    manifest = {
+        "documents": len(documents),
+        "chunks": len(chunks),
+        "embedding_model": EMBEDDING_MODEL,
+        "chunk_size": CHUNK_SIZE,
+        "chunk_overlap": CHUNK_OVERLAP,
+        "sources": sources
+    }
+
+    with open(MANIFEST_PATH, "w", encoding="utf-8") as file:
+        json.dump(manifest, file, indent=2)
+
+
+# INGESTION CHAIN
+
+def build_ingestion_chain():
+
+    clean = RunnableLambda(lambda x: {"documents": clean_documents(x["documents"])})
+
+    deduplicate = RunnableLambda(lambda x: {"documents": deduplicate_documents(x["documents"])})
+
+    split = RunnableLambda(
+        lambda x: {
+            "documents": x["documents"],
+            "chunks": split_documents(x["documents"])
+        }
+    )
+
+    build_indexes = RunnableParallel(
+        faiss=RunnableLambda(lambda x: build_faiss(x["chunks"])),
+        bm25=RunnableLambda(lambda x: build_bm25(x["chunks"])),
+        data=RunnableLambda(lambda x: x)
+    )
+
+    return clean | deduplicate | split | build_indexes
 
 
 # MAIN
@@ -271,137 +279,37 @@ def main():
     STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     LOCAL_DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("\n================================")
-    print("LOADING DOCUMENTS")
-    print("================================\n")
+    print("Loading documents...\n")
 
-    web_documents, failures = load_web_documents()
+    urls = load_urls()
+
+    web_documents = load_web_documents(urls)
     local_documents = load_local_documents()
 
-    raw_documents = web_documents + local_documents
+    documents = web_documents + local_documents
 
-    if not raw_documents:
-        raise RuntimeError(
-            "No documents were loaded.\n"
-            "Check data/docs_urls.txt or data/local_docs/."
-        )
+    print(f"\nLoaded documents: {len(documents)}")
 
-    print(f"\nDocuments before deduplication: {len(raw_documents)}")
+    if not documents:
+        print("No documents found.")
+        return
 
-    raw_documents = deduplicate_documents(raw_documents)
+    print("\nRunning ingestion pipeline...")
 
-    print(f"Documents after deduplication: {len(raw_documents)}")
+    chain = build_ingestion_chain()
 
-    print("\n================================")
-    print("CHUNKING DOCUMENTS")
-    print("================================\n")
+    result = chain.invoke({"documents": documents}) # <-----
 
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        separators=["\n\n", "\n", ". ", " ", ""]
-    )
+    final_documents = result["data"]["documents"]
+    chunks = result["data"]["chunks"]
 
-    chunks = splitter.split_documents(raw_documents)
-    chunks = add_chunk_metadata(chunks)
+    save_manifest(final_documents, chunks)
 
-    if not chunks:
-        raise RuntimeError("Chunking produced zero chunks.")
-
-    print(f"Created {len(chunks)} chunks.")
-
-    print("\n================================")
-    print("LOADING EMBEDDING MODEL")
-    print("================================\n")
-
-    print(f"Embedding model: {EMBEDDING_MODEL}")
-
-    embeddings = HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL
-    )
-
-    print("\n================================")
-    print("BUILDING FAISS INDEX")
-    print("================================\n")
-
-    vectorstore = FAISS.from_documents(
-        chunks,
-        embeddings
-    )
-
-    vectorstore.save_local(str(FAISS_DIR))
-
-    print(f"FAISS index saved to: {FAISS_DIR}")
-
-    print("\n================================")
-    print("BUILDING BM25 INDEX")
-    print("================================\n")
-
-    tokenized_corpus = [
-        tokenize(document.page_content)
-        for document in chunks
-    ]
-
-    bm25 = BM25Okapi(tokenized_corpus)
-
-    with open(BM25_PATH, "wb") as file:
-
-        pickle.dump(
-            {
-                "bm25": bm25,
-                "documents": chunks
-            },
-            file
-        )
-
-    print(f"BM25 index saved to: {BM25_PATH}")
-
-    print("\n================================")
-    print("SAVING MANIFEST")
-    print("================================\n")
-
-    manifest = {
-        "documents": len(raw_documents),
-        "chunks": len(chunks),
-        "embedding_model": EMBEDDING_MODEL,
-        "chunk_size": CHUNK_SIZE,
-        "chunk_overlap": CHUNK_OVERLAP,
-
-        "sources": [
-            {
-                "title": document.metadata.get("title", ""),
-                "source": document.metadata.get("source", ""),
-                "original_source": document.metadata.get("original_source", ""),
-                "source_type": document.metadata.get("source_type", "")
-            }
-            for document in raw_documents
-        ],
-
-        "failures": failures
-    }
-
-    with open(MANIFEST_PATH, "w", encoding="utf-8") as file:
-
-        json.dump(
-            manifest,
-            file,
-            indent=2,
-            ensure_ascii=False
-        )
-
-    print(f"Manifest saved to: {MANIFEST_PATH}")
-
-    print("\n================================")
-    print("INGESTION COMPLETE")
-    print("================================")
-
-    print(f"Documents : {len(raw_documents)}")
-    print(f"Chunks    : {len(chunks)}")
-    print(f"Failures  : {len(failures)}")
-    print(f"FAISS     : {FAISS_DIR}")
-    print(f"BM25      : {BM25_PATH}")
-
-    print("================================\n")
+    print("\nIngestion complete.")
+    print(f"Documents: {len(final_documents)}")
+    print(f"Chunks: {len(chunks)}")
+    print(f"FAISS: {FAISS_DIR}")
+    print(f"BM25: {BM25_PATH}")
 
 
 if __name__ == "__main__":
